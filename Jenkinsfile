@@ -1,21 +1,46 @@
 pipeline {
+    environment { 
+        registry = "sreehar98765/cicdps" 
+        registryCredential = 'docker-hub' 
+        dockerImage = '' 
+    }
     agent any
 
     stages {
-        stage('Validate') {
+        
+        stage('Build Image') {
             steps {
-                sh 'mvn validate'
-		
+                echo 'Building Docker Image'
+                script {
+                    dockerImage = docker.build registry + ":$BUILD_NUMBER"
+                }
             }
         }
-        stage('Unit Test') {
+        
+        stage('Deploy Image') {
             steps {
-                sh 'mvn test'
+                echo 'Pushing Docker Image'
+                script {
+                   docker.withRegistry( '', registryCredential ) {
+                   dockerImage.push("$BUILD_NUMBER")
+                   dockerImage.push('latest')
+                  }
+                }
             }
         }
-        stage('Build') {
+        
+        stage('Clean Up') {
             steps {
-                sh 'mvn package'
+                sh "docker rmi $registry:$BUILD_NUMBER"
+                sh "docker rmi $registry:latest"
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying....'
+                sh "kubectl apply -f deployment.yaml"
+                sh "kubectl apply -f service.yaml"
+                sh "kubectl rollout restart deployment.apps/calc-deployment"
             }
         }
     }
